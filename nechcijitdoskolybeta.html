@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <title>Nechci jít do školy</title>
   <style>
-    /* Základní reset a fullscreen nastavení */
+    /* Základní reset a styl pro fullscreen */
     * { margin: 0; padding: 0; box-sizing: border-box; }
     html, body {
       width: 100%;
@@ -14,36 +14,22 @@
       background: #000;
       overflow: hidden;
       font-family: monospace;
-      position: relative;
     }
     /* Canvas přes celou obrazovku */
     canvas {
       display: block;
+      border: 4px solid #222;
       background: #ccc;
       image-rendering: pixelated;
-    }
-    /* Styl tlačítka */
-    #startBtn {
-      position: absolute;
-      top: 50%;
-      left: 50%;
-      transform: translate(-50%, -50%);
-      padding: 15px 30px;
-      font-size: 24px;
-      z-index: 10;
-      cursor: pointer;
     }
   </style>
 </head>
 <body>
   <canvas id="gameCanvas"></canvas>
-  <button id="startBtn">Hraj</button>
   <script>
+    // Nastavení canvasu na celou obrazovku
     const canvas = document.getElementById('gameCanvas');
     const ctx = canvas.getContext('2d');
-    const startBtn = document.getElementById('startBtn');
-
-    // Nastavení canvasu na celou obrazovku
     function resizeCanvas() {
       canvas.width = window.innerWidth;
       canvas.height = window.innerHeight;
@@ -52,11 +38,11 @@
     resizeCanvas();
 
     // Herní nastavení
-    const levelWidth = 3000;          // Šířka levelu
+    const levelWidth = 3000;          // Šířka levelu (svět)
     const groundHeight = 50;          // Výška podlahy
     const gravity = 0.5;              // Gravitace
-    const playerSpeed = 2;            // Rychlost hráče
-    const projectileInterval = 2000;  // Interval vrhu projectile (ms)
+    const playerSpeed = 2;            // Horizontální rychlost hráče
+    const projectileInterval = 2000;  // Interval vrhu projektile (ms)
 
     // Herní stavy: "start", "playing", "win", "lost"
     let gameState = "start";
@@ -66,7 +52,7 @@
     // Hráč – modrý pixel-art
     const player = {
       x: 50,
-      y: 0,         // Nastaví se dle canvasu
+      y: 0,         // Bude nastaveno dle výšky canvasu
       width: 20,
       height: 30,
       vy: 0,
@@ -76,47 +62,46 @@
     // Paní učitelka – červená postava
     const teacher = {
       x: 2800,
-      y: 0,         // Nastaví se dle canvasu
+      y: 0,         // Bude nastaveno dle výšky canvasu
       width: 32,
       height: 48,
       explosion: false,
       explosionTime: 0
     };
 
-    // Projektile (pravítka a křídy)
+    // Projektile (pravítka a křídy) házené učitelkou
     let projectiles = [];
     let projectileTimer = 0;
 
-    // Kamera – offset pro posun levelu
+    // Kamera – offset, aby se hráč posouval po levelu
     let cameraX = 0;
 
-    // Inicializace a restart hry
+    // Inicializace/Restart hry
     function initGame() {
       gameState = "playing";
       startTime = performance.now();
-      // Reset hráče
+      // Reset hráče: umístění na podlahu
       player.x = 50;
       player.y = canvas.height - groundHeight - player.height;
       player.vy = 0;
       player.onGround = true;
-      // Nastavení paní učitelky
+      // Nastavení paní učitelky: umístění na podlaze
       teacher.x = 2800;
       teacher.y = canvas.height - groundHeight - teacher.height;
       teacher.explosion = false;
       teacher.explosionTime = 0;
-      // Vyčištění projectile
+      // Vyčistíme projektile
       projectiles = [];
       projectileTimer = 0;
-      // Skryj tlačítko
-      startBtn.style.display = "none";
     }
 
-    // Tlačítko Hraj – kliknutí spustí hru
-    startBtn.addEventListener('click', initGame);
-
-    // Volitelně i skok přes klávesnici
+    // Ovládání přes klávesnici
     document.addEventListener('keydown', function(e) {
-      if (gameState === "playing") {
+      if (gameState === "start" || gameState === "win" || gameState === "lost") {
+        if (e.code === "Space") {
+          initGame();
+        }
+      } else if (gameState === "playing") {
         if (e.code === "ArrowUp" || e.code === "Space") {
           if (player.onGround) {
             player.vy = -10;
@@ -126,12 +111,25 @@
       }
     });
 
+    // Přidání ovládání pro tablety (dotykové ovládání)
+    document.addEventListener('touchstart', function(e) {
+      e.preventDefault();
+      if (gameState === "start" || gameState === "win" || gameState === "lost") {
+        initGame();
+      } else if (gameState === "playing") {
+        if (player.onGround) {
+          player.vy = -10;
+          player.onGround = false;
+        }
+      }
+    }, {passive: false});
+
     // Aktualizace stavu hry
     function update(deltaTime) {
       if (gameState === "playing") {
         // Hráč běží vpřed
         player.x += playerSpeed;
-        // Aplikace gravitace a skoku
+        // Aplikace gravitace a skok
         player.vy += gravity;
         player.y += player.vy;
         let groundY = canvas.height - groundHeight - player.height;
@@ -140,13 +138,11 @@
           player.vy = 0;
           player.onGround = true;
         }
-
-        // Pohyb kamery
+        // Posun kamery, aby hráč byl vidět
         cameraX = player.x - canvas.width / 4;
         if (cameraX < 0) cameraX = 0;
         if (cameraX > levelWidth - canvas.width) cameraX = levelWidth - canvas.width;
-
-        // Učitelka začne mířit a házet projectile, když hráč dosáhne určité části levelu
+        // Učitelka začne mířit a házet projektile
         if (player.x > 1000) {
           projectileTimer += deltaTime;
           if (projectileTimer > projectileInterval) {
@@ -154,8 +150,7 @@
             projectileTimer = 0;
           }
         }
-
-        // Aktualizace projectile a kolize s hráčem
+        // Aktualizace pozic projectile a kontrola kolizí
         for (let i = projectiles.length - 1; i >= 0; i--) {
           let p = projectiles[i];
           p.x += p.vx;
@@ -170,8 +165,7 @@
             }
           }
         }
-
-        // Kontrola, zda hráč dosáhl učitelky
+        // Kontrola, zda hráč dohonil paní učitelku
         if (player.x + player.width >= teacher.x) {
           teacher.explosion = true;
           teacher.explosionTime = performance.now();
@@ -181,7 +175,7 @@
       }
     }
 
-    // Vytvoření projectile – učitelka míří přímo na hráče
+    // Učitelka nyní míří přímo na hráče při vrhu projektile
     function spawnProjectile() {
       let originX = teacher.x;
       let originY = teacher.y + teacher.height / 2;
@@ -196,18 +190,18 @@
       let speed = 5;
       let vx = (dx / dist) * speed;
       let vy = (dy / dist) * speed;
-      // Malá náhodná odchylka
+      // Přidáme malou náhodnou odchylku
       vx += (Math.random() - 0.5);
       vy += (Math.random() - 0.5);
       projectiles.push({ x: originX, y: originY, vx: vx, vy: vy, size: size, type: type });
     }
 
-    // Kreslení herních prvků
+    // Kreslení herního světa
     function draw() {
       ctx.clearRect(0, 0, canvas.width, canvas.height);
       drawBackground();
 
-      // Vykreslení učitelky
+      // Kreslení paní učitelky (exploze při vítězství)
       if (gameState === "win" && teacher.explosion) {
         let t = (performance.now() - teacher.explosionTime) / 1000;
         if (t < 1) {
@@ -218,6 +212,7 @@
           ctx.fill();
         }
       } else {
+        // Normální vykreslení učitelky
         ctx.fillStyle = '#f00';
         ctx.fillRect(teacher.x - cameraX, teacher.y, teacher.width, teacher.height);
         ctx.fillStyle = '#000';
@@ -225,39 +220,48 @@
         ctx.fillRect(teacher.x - cameraX + 20, teacher.y + 10, 4, 4);
       }
 
-      // Vykreslení hráče
+      // Hráč – modrý obdélník
       ctx.fillStyle = '#00f';
       ctx.fillRect(player.x - cameraX, player.y, player.width, player.height);
 
-      // Vykreslení projectile
+      // Kreslení projektile (pravítka a křídy)
       projectiles.forEach(p => {
         ctx.fillStyle = p.type === 0 ? '#555' : '#fff';
         ctx.fillRect(p.x - cameraX, p.y, p.size, p.size);
       });
 
-      // Vykreslení podlahy
+      // Kreslení podlahy
       ctx.fillStyle = '#888';
       ctx.fillRect(0, canvas.height - groundHeight, canvas.width, groundHeight);
 
-      // UI zprávy pro výhru nebo prohru
+      // UI – zprávy pro start, výhru nebo prohru
       ctx.textAlign = "center";
       ctx.font = "16px monospace";
-      if (gameState === "lost") {
+      if (gameState === "start") {
+        ctx.fillStyle = '#fff';
+        ctx.fillText("Stiskni mezerník nebo dotkni se pro start", canvas.width / 2, canvas.height / 2);
+      } else if (gameState === "lost") {
         ctx.fillStyle = '#f00';
-        ctx.fillText("Byl jsi zasažen! Klikni na Hraj pro restart", canvas.width / 2, canvas.height / 2);
+        ctx.fillText("Byl jsi zasažen! Stiskni mezerník nebo dotkni se pro restart", canvas.width / 2, canvas.height / 2);
       } else if (gameState === "win") {
         ctx.fillStyle = '#fff';
-        let stars = 0;
-        if (elapsedTime <= 60) stars = 3;
-        else if (elapsedTime <= 120) stars = 2;
-        else if (elapsedTime <= 180) stars = 1;
-        ctx.fillText("Vyhrál jsi! Čas: " + elapsedTime.toFixed(1) + " s", canvas.width / 2, canvas.height / 2 - 20);
-        ctx.fillText("Hvězdičky: " + "★".repeat(stars) + "☆".repeat(3 - stars), canvas.width / 2, canvas.height / 2 + 10);
-        ctx.fillText("Klikni na Hraj pro restart", canvas.width / 2, canvas.height / 2 + 40);
+        if (elapsedTime <= 180) {
+          let stars = 0;
+          if (elapsedTime <= 60) stars = 3;
+          else if (elapsedTime <= 120) stars = 2;
+          else if (elapsedTime <= 180) stars = 1;
+          ctx.fillText("Vyhrál jsi! Čas: " + elapsedTime.toFixed(1) + " s", canvas.width / 2, canvas.height / 2 - 20);
+          ctx.fillText("Hvězdičky: " + "★".repeat(stars) + "☆".repeat(3 - stars), canvas.width / 2, canvas.height / 2 + 10);
+          if (stars === 0) {
+            ctx.fillText("0 hvězdiček, opakuj kolo – stiskni mezerník nebo dotkni se", canvas.width / 2, canvas.height / 2 + 40);
+          } else {
+            ctx.fillText("Stiskni mezerník nebo dotkni se pro restart", canvas.width / 2, canvas.height / 2 + 40);
+          }
+        }
       }
     }
 
-    // Kreslení pozadí – chodba se svislými pruhy
+    // Kreslení pozadí chodby se svislými pruhy
     function drawBackground() {
       ctx.fillStyle = '#ddd';
       ctx.fillRect(0, 0, canvas.width, canvas.height - groundHeight);
@@ -267,6 +271,7 @@
       }
     }
 
+    // Hlavní herní smyčka
     let lastTime = performance.now();
     function gameLoop() {
       let now = performance.now();
